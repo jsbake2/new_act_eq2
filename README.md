@@ -48,7 +48,25 @@ See [`docs/dashboard.txt`](docs/dashboard.txt) for a layout sketch.
 - **History.** Finished fights persist to SQLite and are selectable from the
   dashboard; a date/time range importer re-parses past sessions.
 
-## Quick start
+## Install (one shot, zero questions)
+
+On CachyOS / Arch (any desktop), with Steam + EQ2 installed:
+
+```bash
+git clone https://github.com/jsbake2/new_act_eq2.git
+cd new_act_eq2
+./install.sh           # (or: bash install.sh)
+```
+
+The installer auto-detects your package manager and session type, installs
+prerequisites (Python + the right clipboard tool — asks for sudo once), finds your
+EverQuest II log folder automatically, configures itself, starts EQ2ACT as a
+background service that auto-starts on login, and **prints the dashboard URL**
+(default `http://127.0.0.1:8777`). Then just run `/log on` in game.
+
+> Use `bash install.sh`, not `sh install.sh` — it relies on bash features.
+
+## Quick start (manual / dev)
 
 ```bash
 # 1. In EQ2, turn logging on:   /log on
