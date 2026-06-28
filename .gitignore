@@ -1,0 +1,18 @@
+# EQ2ACT
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+*.sqlite
+*.sqlite-journal
+*.db
+data/*.sqlite*
+data/fights.db*
+*.log
+!tests/sample_logs/*.txt
+.DS_Store
+.idea/
+.vscode/
+config/settings.local.json

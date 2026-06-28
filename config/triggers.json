@@ -1,0 +1,32 @@
+[
+  {
+    "id": "example_group_join",
+    "name": "Someone joined the group",
+    "pattern": "(\\w+) has joined the group\\.",
+    "enabled": false,
+    "sound": "ding",
+    "tts": true,
+    "say": "\\1 joined the group",
+    "cooldown": 1.0
+  },
+  {
+    "id": "example_you_died",
+    "name": "You died",
+    "pattern": "^You have died\\.",
+    "enabled": false,
+    "sound": "alarm",
+    "tts": true,
+    "say": "You died",
+    "cooldown": 5.0
+  },
+  {
+    "id": "example_revive",
+    "name": "Revive available",
+    "pattern": "would you like to be revived",
+    "enabled": false,
+    "sound": "ding",
+    "tts": false,
+    "say": "Revive available",
+    "cooldown": 5.0
+  }
+]

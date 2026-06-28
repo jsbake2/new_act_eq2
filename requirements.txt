@@ -1,0 +1,5 @@
+# EQ2ACT runs on the Python standard library only — no install required.
+# (http.server + Server-Sent Events for the live dashboard, sqlite3 for storage.)
+#
+# Optional: nothing here is needed to run. Listed only for dev tooling.
+# pytest   # to run the test-suite with `pytest` instead of `python -m tests.run`

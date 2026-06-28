@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EQ2ACT — combat tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">⚔</span>
+    <span class="title">EQ2<b>ACT</b></span>
+    <span class="ver" id="ver">v0.1</span>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="triggers">Triggers</button>
+    <button class="tab" data-tab="settings">Settings</button>
+  </nav>
+  <div class="conn">
+    <span class="zonewrap" id="zoneWrap" title="Current zone">
+      <span class="zoneicon">📍</span><span id="zoneLabel">—</span>
+      <button class="btn tiny primary" id="btnParseZone">parse zone</button>
+    </span>
+    <select class="charsel" id="charSelect" title="Switch live character (follows the log)"></select>
+    <span class="mode-badge" id="modeBadge">group</span>
+    <span class="dot" id="connDot" title="disconnected"></span>
+  </div>
+</header>
+
+<div id="toasts" class="toasts"></div>
+
+<!-- ================= DASHBOARD ================= -->
+<main id="dashboard" class="view active">
+  <section class="stripwrap">
+    <div class="stat">
+      <div class="stat-label">ENCOUNTER</div>
+      <div class="stat-val" id="fightName">No active fight</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">DURATION</div>
+      <div class="stat-val mono" id="fightDur">0s</div>
+    </div>
+    <div class="stat accent">
+      <div class="stat-label">RAID DPS</div>
+      <div class="stat-val mono big" id="raidDps">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">TOTAL DAMAGE</div>
+      <div class="stat-val mono" id="totalDmg">0</div>
+    </div>
+    <div class="stat live-flag">
+      <div class="stat-label">STATE</div>
+      <div class="stat-val" id="liveState"><span class="pill idle">IDLE</span></div>
+    </div>
+    <div class="stat-actions">
+      <button class="btn primary" id="btnBreakdown">⊞ Breakdown</button>
+      <button class="btn" id="btnPaste">Copy parse</button>
+      <button class="btn ghost" id="btnEnd">End fight</button>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel chartpanel">
+      <div class="panel-head">
+        <span id="chartTitle">DPS over time</span>
+        <span class="muted" id="chartSub"></span>
+      </div>
+      <canvas id="dpsChart" height="240"></canvas>
+      <div class="legend" id="chartLegend"></div>
+    </section>
+
+    <aside class="panel histpanel">
+      <div class="panel-head">
+        <span>Fights <span class="muted" style="font-weight:400">· click to view, ☑ to combine</span></span>
+        <button class="btn tiny ghost" id="btnClear" title="Delete all saved fights">clear</button>
+      </div>
+      <div class="combobar" id="comboBar">
+        <span id="comboCount">0 selected</span>
+        <button class="btn tiny primary" id="btnCombine">Combine</button>
+        <button class="btn tiny" id="btnZone" title="Combine every fight in this zone">Whole zone</button>
+        <button class="btn tiny ghost" id="btnComboClear">clear</button>
+      </div>
+      <div class="histlist" id="histList"></div>
+    </aside>
+
+    <section class="panel tablepanel">
+      <div class="panel-head">
+        <span id="tableTitle">Damage — my group &amp; pets</span>
+        <span class="muted" id="tableSub"></span>
+      </div>
+      <div class="dps-table" id="dpsTable"></div>
+    </section>
+
+    <section class="panel enemypanel">
+      <div class="panel-head"><span>Incoming / enemies</span></div>
+      <div class="dps-table small" id="enemyTable"></div>
+    </section>
+  </div>
+</main>
+
+<!-- ================= TRIGGERS ================= -->
+<main id="triggers" class="view">
+  <section class="panel">
+    <div class="panel-head">
+      <span>Notification triggers</span>
+      <div>
+        <button class="btn ghost" id="btnTestSound">Test sound</button>
+        <button class="btn" id="btnAddTrigger">+ Add trigger</button>
+        <button class="btn primary" id="btnSaveTriggers">Save</button>
+      </div>
+    </div>
+    <p class="hint">Each line below is matched (regex) against combat-log text with the timestamp
+       stripped. Use capture groups and reference them in <i>Say</i> as <code>\1</code>.
+       Dings play in this browser tab — keep it open.</p>
+    <div class="trig-head">
+      <span>On</span><span>Name</span><span>Regex pattern</span><span>Sound</span>
+      <span>TTS</span><span>Say / message</span><span>Cooldown</span><span></span>
+    </div>
+    <div id="trigList"></div>
+    <div class="tester">
+      <div class="panel-head"><span>Pattern tester</span></div>
+      <div class="tester-row">
+        <input id="testPattern" placeholder="regex pattern, e.g. (\w+) has joined the group\.">
+        <input id="testSample" placeholder="sample log text to test against">
+        <button class="btn" id="btnRunTest">Test</button>
+        <span id="testResult" class="muted"></span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ================= SETTINGS ================= -->
+<main id="settings" class="view">
+  <section class="panel narrow">
+    <div class="panel-head"><span>Settings</span></div>
+    <label class="field">
+      <span>EQ2 log file path</span>
+      <input id="setLogPath" placeholder="/path/to/EverQuest II/logs/eq2log_YourName.txt">
+      <small>Run <code>/log on</code> in game. The file is created under your EQ2 install's
+        <code>logs/</code> folder. Restart EQ2ACT after changing this to start tailing it.</small>
+    </label>
+    <label class="field">
+      <span>Your character name</span>
+      <input id="setMe" placeholder="YourName — expands YOU / YOUR in the log">
+    </label>
+    <label class="field">
+      <span>Tracking mode</span>
+      <select id="setMode">
+        <option value="solo">solo — only me + my pets</option>
+        <option value="group">group — me + my group + pets</option>
+        <option value="raid">raid — me + group + raid + pets</option>
+        <option value="all">all — track everyone</option>
+      </select>
+      <small>Your side is auto-detected from combat: EQ2 encounter-locks mobs, so
+        anyone damaging your mob (or cross-healing) is your group/raid. Pets credit
+        their owner. For a strict 6-person group filter in a raid, type
+        <code>/whogroup</code> in game. <b>solo</b> tracks only you + your pets.</small>
+    </label>
+    <div class="row2">
+      <label class="field">
+        <span>Encounter timeout (s)</span>
+        <input id="setTimeout" type="number" min="3" max="60" step="1">
+      </label>
+      <label class="field">
+        <span>Paste — top N</span>
+        <input id="setPasteTop" type="number" min="1" max="24" step="1">
+      </label>
+    </div>
+    <label class="field">
+      <span>Paste title</span>
+      <input id="setPasteTitle" placeholder="EQ2ACT">
+    </label>
+
+    <div class="panel-head" style="margin-top:8px"><span>Auto-copy to clipboard</span></div>
+    <label class="checkfield">
+      <input id="setAutoCopy" type="checkbox">
+      <span>Copy a fight's parse to the clipboard when it ends</span>
+    </label>
+    <div class="row2">
+      <label class="field">
+        <span>Only fights at least (seconds)</span>
+        <input id="setAutoSecs" type="number" min="0" max="3600" step="5">
+      </label>
+      <label class="field">
+        <span>…and at least (damage, 0 = off)</span>
+        <input id="setAutoDmg" type="number" min="0" step="1000">
+      </label>
+    </div>
+    <small class="muted" style="display:block;margin:-6px 0 14px">
+      Keeps the spam down — only fights worth parsing land on your clipboard.
+      The <b>Copy parse</b> button always works on demand.</small>
+
+    <button class="btn primary" id="btnSaveSettings">Save settings</button>
+
+    <div class="panel-head" style="margin-top:24px"><span>Group roster (live)</span></div>
+    <div id="rosterView" class="roster"></div>
+  </section>
+
+  <section class="panel narrow" style="margin-top:16px">
+    <div class="panel-head"><span>Parse past combat</span>
+      <span class="muted">scan a character's log for a time range</span></div>
+    <p class="hint">Pick a character and an optional date/time window, then Parse.
+      Matching encounters are added to your <b>Fights</b> list on the Dashboard.</p>
+    <div class="row2">
+      <label class="field">
+        <span>Character</span>
+        <select id="impChar"></select>
+      </label>
+      <label class="field">
+        <span>Detection mode</span>
+        <select id="impMode">
+          <option value="all">all players (auto-detect group)</option>
+          <option value="group">group only (from /whogroup)</option>
+          <option value="solo">solo — just this character + pets</option>
+        </select>
+      </label>
+    </div>
+    <div class="row2">
+      <label class="field"><span>From (blank = start of log)</span>
+        <input id="impFrom" type="datetime-local"></label>
+      <label class="field"><span>To (blank = end of log)</span>
+        <input id="impTo" type="datetime-local"></label>
+    </div>
+    <div class="quickrange" id="quickRange">
+      <button class="btn tiny ghost" data-range="tonight">Tonight</button>
+      <button class="btn tiny ghost" data-range="today">Today</button>
+      <button class="btn tiny ghost" data-range="2h">Last 2h</button>
+      <button class="btn tiny ghost" data-range="all">Whole log</button>
+    </div>
+    <button class="btn primary" id="btnImport" style="margin-top:12px">Parse range</button>
+    <span id="impResult" class="muted" style="margin-left:10px"></span>
+  </section>
+</main>
+
+<!-- fight breakdown modal -->
+<div class="modal" id="bdModal">
+  <div class="modal-box bd-box">
+    <div class="panel-head">
+      <span id="bdTitle">Fight breakdown</span>
+      <button class="btn tiny ghost" id="bdClose">close</button>
+    </div>
+    <div class="bd-stats" id="bdStats"></div>
+    <div class="bd-body">
+      <div class="bd-members">
+        <div class="bd-sub">Group — click a member</div>
+        <div id="bdMemberList"></div>
+      </div>
+      <div class="bd-detail">
+        <div class="bd-sub" id="bdMemberName">—</div>
+        <div class="bd-detail-grid">
+          <div class="bd-donut">
+            <canvas id="bdDonut"></canvas>
+            <div class="legend" id="bdLegend"></div>
+          </div>
+          <div class="bd-skills" id="bdSkills"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- paste modal -->
+<div class="modal" id="pasteModal">
+  <div class="modal-box">
+    <div class="panel-head"><span>Pastable group parse</span>
+      <button class="btn tiny ghost" id="pasteClose">close</button></div>
+    <textarea id="pasteText" rows="8" readonly></textarea>
+    <div class="modal-actions">
+      <span class="muted" id="pasteCopied"></span>
+      <button class="btn primary" id="pasteCopyBtn">Copy to clipboard</button>
+    </div>
+  </div>
+</div>
+
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

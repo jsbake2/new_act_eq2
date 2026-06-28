@@ -1,0 +1,19 @@
+EQ2ACT dashboard — layout sketch
+
+┌ EQ2ACT ───────────────[ Dashboard | Triggers | Settings ]──── Gaptia [group] ● ┐
+│                                                                                │
+│ ┌ ENCOUNTER ─┐ ┌ DURATION ┐ ┌ RAID DPS ─┐ ┌ TOTAL DMG ┐ ┌ STATE ┐  [Copy parse]│
+│ │Brother Shen│ │  1m02s   │ │  67.9M    │ │  4.21B    │ │● LIVE │  [End fight]  │
+│ └────────────┘ └──────────┘ └───────────┘ └───────────┘ └───────┘              │
+│                                                                                │
+│ ┌ DPS over time ─────────────────────────┐  ┌ Fights ──────────────┐          │
+│ │       ╱▔▔╲      ╱▔▔▔╲                   │  │▸ Brother Shen  67.9M │ LIVE     │
+│ │   ╱▔╲╱    ╲▔▔╲╱      ╲▔▔╲ (stacked area)│  │  a fierce badger 8.2K│          │
+│ │ ╱▔            stacked per-combatant     │  │  Trash pull     1.1M │          │
+│ └─────────────────────────────────────────┘  └──────────────────────┘          │
+│ ┌ Damage — my group & pets ──────────────┐                                     │
+│ │ 1 Gaptia    ████████████ 33.9M  49.9%  │  ← click row → ability breakdown    │
+│ │ 2 Maergoth  ████████     22.6M  33.3%  │                                     │
+│ │ 3 Healbot   ███          11.4M  16.8%  │                                     │
+│ └─────────────────────────────────────────┘                                     │
+└────────────────────────────────────────────────────────────────────────────────┘

@@ -1,0 +1,19 @@
+(1649968680)[Thu Apr 14 22:38:00 2022] Maergoth Lvl 125 Conjuror (Group)
+(1649968680)[Thu Apr 14 22:38:00 2022] Gaptia Lvl 125 Templar (Group)
+(1649968681)[Thu Apr 14 22:38:01 2022] YOU hit a fierce badger for 1,234 slashing damage.
+(1649968681)[Thu Apr 14 22:38:01 2022] YOUR Coordinated Wounds hits a fierce badger for 5,678 cold damage.
+(1649968682)[Thu Apr 14 22:38:02 2022] Maergoth's Lightning Strike hits a fierce badger for 12,345 magic damage.
+(1649968682)[Thu Apr 14 22:38:02 2022] Gnasher<Maergoth's tiger> hits a fierce badger for 2,000 crushing damage.
+(1649968683)[Thu Apr 14 22:38:03 2022] YOUR Coordinated Wounds critically hits a fierce badger for a critical of 11.0K cold damage.
+(1649968683)[Thu Apr 14 22:38:03 2022] YOUR Frozen Whirlwind multi attacks a fierce badger for 400 heat and 200 disease damage.
+(1649968684)[Thu Apr 14 22:38:04 2022] a fierce badger tries to hit YOU, but YOU dodge.
+(1649968684)[Thu Apr 14 22:38:04 2022] a fierce badger hits Gaptia for 850 piercing damage.
+(1649968684)[Thu Apr 14 22:38:04 2022] YOUR Healing Light heals Gaptia for 5,000 hit points.
+(1649968685)[Thu Apr 14 22:38:05 2022] Randomstranger hits a fierce badger for 99,999 crushing damage.
+(1649968685)[Thu Apr 14 22:38:05 2022] YOU have killed a fierce badger.
+(1649968720)[Thu Apr 14 22:38:40 2022] YOUR Coordinated Wounds hits Brother Shen for 8,000 cold damage.
+(1649968721)[Thu Apr 14 22:38:41 2022] Gaptia's Coordinated Wounds hits Brother Shen for a critical of 17.7B cold damage.
+(1649968722)[Thu Apr 14 22:38:42 2022] Maergoth's Lightning Strike hits Brother Shen for 270,333,864 magic damage.
+(1649968723)[Thu Apr 14 22:38:43 2022] YOUR Epiphany refreshes YOU for 1,144 mana points.
+(1649968724)[Thu Apr 14 22:38:44 2022] YOUR Scaled Protection absorbs 5,000 points of damage from being done to Gaptia.
+(1649968725)[Thu Apr 14 22:38:45 2022] YOU have killed Brother Shen.
