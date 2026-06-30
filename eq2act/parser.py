@@ -63,6 +63,15 @@ WARD_RE = re.compile(
     r") points? of damage from being done to (?P<victim>.+?)"
     r"(?: with " + _AMT + r" points? of damage bleeding through)?\."
 )
+# 5b) threat / hate generation
+#   "Prax's Insidious Whisper increases THEIR hate with a mob for 115 threat."
+#   "YOUR Taunt increases YOUR hate with a mob for 500 threat."
+THREAT_RE = re.compile(
+    r"^(?P<ownerskill>.+?) (?P<direction>increases|reduces) "
+    r"(?:YOUR|THEIR|YOU|.+?) hate (?:position )?with (?P<victim>.+?) "
+    r"(?:by |for )?(?P<crit>a .*?critical of )?(?P<amount>" + _AMT + r") "
+    r"(?P<unit>threat|positions?)\.$"
+)
 # 6) miss / parry / dodge / riposte / resist / immune
 MISS_RE = re.compile(
     r"^(?P<attacker>.+?) (?:try|tries) to (?P<attackType>[^ ]+) "
@@ -255,6 +264,16 @@ class Parser:
             vic, _ = self.normalise_actor(wm.group("victim"))
             return CombatEvent(ts, "ward", atk, vic, skill,
                                parse_amount(wm.group("damage")), "ward",
+                               owner=owner, raw=raw)
+
+        tm = THREAT_RE.match(msg)
+        if tm and tm.group("unit").startswith("threat"):
+            atk, owner, skill = self._split_attacker_skill(tm.group("ownerskill"))
+            vic, _ = self.normalise_actor(tm.group("victim"))
+            amt = parse_amount(tm.group("amount"))
+            if tm.group("direction") == "reduces":
+                amt = -amt
+            return CombatEvent(ts, "threat", atk, vic, skill, amt, "threat",
                                owner=owner, raw=raw)
 
         nm = NODMG_RE.match(msg)

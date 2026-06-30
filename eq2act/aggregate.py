@@ -12,8 +12,8 @@ from typing import List
 def _blank_combatant(name: str, is_friend: bool) -> dict:
     return {"name": name, "is_friend": is_friend, "damage": 0, "dps": 0.0,
             "hits": 0, "crits": 0, "crit_pct": 0.0, "misses": 0, "max_hit": 0,
-            "healing": 0, "warding": 0, "damage_taken": 0, "deaths": 0,
-            "pct": 0.0, "skills": {}}
+            "healing": 0, "warding": 0, "threat": 0, "damage_taken": 0,
+            "deaths": 0, "pct": 0.0, "skills": {}}
 
 
 def _merge_skill(into: dict, sk: dict) -> None:
@@ -42,7 +42,7 @@ def combine(details: List[dict], name: str = "Combined") -> dict:
             acc = friends.get(c["name"]) or _blank_combatant(c["name"], c.get("is_friend", True))
             friends[c["name"]] = acc
             for k in ("damage", "hits", "crits", "misses", "healing", "warding",
-                      "damage_taken", "deaths"):
+                      "threat", "damage_taken", "deaths"):
                 acc[k] += c.get(k, 0)
             acc["max_hit"] = max(acc["max_hit"], c.get("max_hit", 0))
             for sk in c.get("skills", []):

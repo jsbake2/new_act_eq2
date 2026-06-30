@@ -85,6 +85,18 @@ class TestParser(unittest.TestCase):
         ev = self.parse("a fierce badger tries to hit YOU, but YOU dodge.")
         self.assertEqual(ev.kind, "miss")
 
+    def test_threat(self):
+        ev = self.parse("Maergoth's Insidious Whisper increases THEIR hate with a fierce badger for 115 threat.")
+        self.assertEqual(ev.kind, "threat")
+        self.assertEqual(ev.attacker, "Maergoth")
+        self.assertEqual(ev.skill, "Insidious Whisper")
+        self.assertEqual(ev.amount, 115)
+
+    def test_threat_reduce_is_negative(self):
+        ev = self.parse("YOUR Detaunt reduces YOUR hate with a fierce badger for 50 threat.")
+        self.assertEqual(ev.kind, "threat")
+        self.assertEqual(ev.amount, -50)
+
     def test_death(self):
         ev = self.parse("YOU have killed a fierce badger.")
         self.assertEqual(ev.kind, "death")

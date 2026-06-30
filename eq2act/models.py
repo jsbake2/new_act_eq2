@@ -65,6 +65,7 @@ class Combatant:
     # other roles
     healing: int = 0
     warding: int = 0
+    threat: int = 0
     damage_taken: int = 0
     deaths: int = 0
     skills: dict = field(default_factory=dict)   # name -> SkillStat
@@ -102,6 +103,7 @@ class Combatant:
             "max_hit": self.max_hit,
             "healing": self.healing,
             "warding": self.warding,
+            "threat": self.threat,
             "damage_taken": self.damage_taken,
             "deaths": self.deaths,
             "pct": (100.0 * self.damage / total_friendly_damage)

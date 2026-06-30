@@ -107,6 +107,14 @@ class Fight:
             c = self._combatant(attacker_name, atk_friend)
             c.warding += ev.amount
             c.last_ts = ev.ts
+            c.add_skill_hit(("(pet) " if ev.owner else "") + ev.skill + " (ward)",
+                            ev.amount, ev.crit)
+        elif ev.kind == "threat":
+            c = self._combatant(attacker_name, atk_friend)
+            c.threat += ev.amount
+            c.last_ts = ev.ts
+            c.add_skill_hit(("(pet) " if ev.owner else "") + ev.skill + " (threat)",
+                            ev.amount, ev.crit)
         elif ev.kind == "miss":
             c = self._combatant(attacker_name, atk_friend)
             c.misses += 1

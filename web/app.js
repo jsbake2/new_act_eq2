@@ -301,7 +301,31 @@
       () => { document.execCommand("copy"); $("#pasteCopied").textContent = "copied"; });
   });
   /* ---------------- fight breakdown modal ---------------- */
-  let bdSummary = null, bdMember = null;
+  let bdSummary = null, bdMember = null, bdMetric = "damage";
+  function metricVal(c) {
+    if (bdMetric === "healing") return (c.healing || 0) + (c.warding || 0);
+    if (bdMetric === "threat") return c.threat || 0;
+    return c.damage || 0;
+  }
+  function rateLabel() {
+    return bdMetric === "healing" ? "hps" : bdMetric === "threat" ? "tps" : "dps";
+  }
+  function skillMatch(name) {
+    const heal = /\((heal|ward)\)$/.test(name);
+    const threat = /\(threat\)$/.test(name);
+    if (bdMetric === "healing") return heal;
+    if (bdMetric === "threat") return threat;
+    return !heal && !threat;
+  }
+  $$("#bdMetric .bdm").forEach((b) => b.addEventListener("click", () => {
+    bdMetric = b.dataset.metric;
+    $$("#bdMetric .bdm").forEach((x) => x.classList.toggle("active", x === b));
+    // jump to the top contributor for this metric
+    const ranked = (bdSummary.combatants || []).slice()
+      .sort((a, c) => metricVal(c) - metricVal(a));
+    bdMember = (ranked[0] || {}).name || bdMember;
+    renderBdMembers(); renderBdDetail();
+  }));
   $("#btnBreakdown").addEventListener("click", () => openBreakdown());
   $("#bdClose").addEventListener("click", () => $("#bdModal").classList.remove("open"));
   $("#bdModal").addEventListener("click", (e) => {
@@ -330,13 +354,18 @@
       `<span class="v${accent ? " accent" : ""}">${esc(v)}</span></div>`;
   }
   function renderBdMembers() {
-    const s = bdSummary, max = s.combatants[0].damage || 1;
-    $("#bdMemberList").innerHTML = s.combatants.map((c, i) => {
-      const col = EQChart.colorFor(i), w = Math.max(2, (c.damage / max) * 100);
+    const s = bdSummary;
+    const dur = s.duration || 1;
+    const ranked = s.combatants.slice().sort((a, c) => metricVal(c) - metricVal(a));
+    const total = ranked.reduce((t, c) => t + metricVal(c), 0) || 1;
+    const max = metricVal(ranked[0]) || 1;
+    $("#bdMemberList").innerHTML = ranked.map((c, i) => {
+      const v = metricVal(c), col = EQChart.colorFor(i), w = Math.max(2, (v / max) * 100);
+      const pct = 100 * v / total;
       return `<div class="bd-row ${c.name === bdMember ? "sel" : ""}" data-m="${escA(c.name)}">` +
         `<div class="bar" style="width:${w}%;background:${col}"></div>` +
         `<div class="nm">${i + 1}. ${esc(c.name)}</div>` +
-        `<div class="dp">${fmt(c.dps)} · ${c.pct.toFixed(0)}%</div></div>`;
+        `<div class="dp">${fmt(v / dur)} · ${pct.toFixed(0)}%</div></div>`;
     }).join("");
     $$("#bdMemberList .bd-row").forEach((r) => r.addEventListener("click", () => {
       bdMember = r.dataset.m; renderBdMembers(); renderBdDetail();
@@ -345,24 +374,29 @@
   function renderBdDetail() {
     const c = (bdSummary.combatants || []).find((x) => x.name === bdMember);
     if (!c) return;
+    const dur = bdSummary.duration || 1;
+    const total = (bdSummary.combatants || []).reduce((t, x) => t + metricVal(x), 0) || 1;
+    const v = metricVal(c);
+    const kind = bdMetric === "healing" ? "healing" : bdMetric === "threat" ? "threat" : "dmg";
     $("#bdMemberName").textContent =
-      `${c.name} — ${fmt(c.damage)} dmg · ${fmt(c.dps)} dps · ${c.pct.toFixed(1)}% of group · ${c.crit_pct.toFixed(0)}% crit`;
-    // donut of top DAMAGE skills (+ "other"); heal entries are tracked
-    // separately and excluded here
-    let skills = (c.skills || []).filter((s) => s.total > 0 && !/\(heal\)$/.test(s.name));
+      `${c.name} — ${fmt(v)} ${kind} · ${fmt(v / dur)} ${rateLabel()} · ` +
+      `${(100 * v / total).toFixed(1)}% of group` +
+      (bdMetric === "damage" ? ` · ${c.crit_pct.toFixed(0)}% crit` : "");
+    // donut of top skills for the selected metric (+ "other")
+    let skills = (c.skills || []).filter((s) => s.total > 0 && skillMatch(s.name));
     const top = skills.slice(0, 8);
     const restTotal = skills.slice(8).reduce((s, k) => s + k.total, 0);
     const items = top.map((s) => ({ label: s.name, value: s.total }));
     if (restTotal > 0) items.push({ label: "other", value: restTotal });
-    const legend = EQChart.drawDonut($("#bdDonut"), items, { size: 220, centerLabel: "damage" });
+    const legend = EQChart.drawDonut($("#bdDonut"), items, { size: 220, centerLabel: kind });
     $("#bdLegend").innerHTML = legend.map((l) =>
       `<span class="lg"><span class="sw" style="background:${l.color}"></span>` +
       `${esc(l.label)} ${l.pct.toFixed(0)}%</span>`).join("");
     // skill bars
-    const dmgMax = skills.length ? skills[0].total : 1;
+    const skMax = skills.length ? skills[0].total : 1;
     $("#bdSkills").innerHTML = skills.map((s, i) => {
-      const col = EQChart.colorFor(i), w = Math.max(2, (s.total / dmgMax) * 100);
-      const pct = c.damage ? (100 * s.total / c.damage) : 0;
+      const col = EQChart.colorFor(i), w = Math.max(2, (s.total / skMax) * 100);
+      const pct = v ? (100 * s.total / v) : 0;
       return `<div class="bd-skill">` +
         `<div class="bar" style="width:${w}%;background:${col}"></div>` +
         `<div class="sn">${esc(s.name)}</div>` +
