@@ -25,6 +25,7 @@
       <button class="btn tiny primary" id="btnParseZone">parse zone</button>
     </span>
     <select class="charsel" id="charSelect" title="Switch live character (follows the log)"></select>
+    <select class="charsel themesel" id="themeSelect" title="Color theme"></select>
     <span class="mode-badge" id="modeBadge">group</span>
     <span class="dot" id="connDot" title="disconnected"></span>
   </div>
@@ -109,15 +110,19 @@
       <div class="stat-val" id="hvChar">—</div>
     </div>
     <div class="stat accent">
-      <div class="stat-label">TOTAL HARVESTED</div>
+      <div class="stat-label">RESOURCES</div>
       <div class="stat-val mono big" id="hvQty">0</div>
     </div>
     <div class="stat">
-      <div class="stat-label">HARVEST ACTIONS</div>
+      <div class="stat-label">PULLS</div>
       <div class="stat-val mono" id="hvActions">0</div>
     </div>
     <div class="stat">
-      <div class="stat-label">UNIQUE ITEMS</div>
+      <div class="stat-label">NODES</div>
+      <div class="stat-val mono" id="hvNodes">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">ITEMS</div>
       <div class="stat-val mono" id="hvUnique">0</div>
     </div>
     <div class="stat">
@@ -126,28 +131,61 @@
     </div>
     <div class="stat-actions">
       <label class="checkfield" style="margin:0" title="Track harvests from the live log">
-        <input id="hvEnabled" type="checkbox"><span>Live tracking</span>
+        <input id="hvEnabled" type="checkbox"><span>Live</span>
       </label>
       <button class="btn ghost" id="hvClear" title="Reset this character's harvest totals">Clear</button>
     </div>
   </section>
 
+  <section class="hvbar">
+    <div class="hvbar-group">
+      <span class="hvbar-lbl">Group by</span>
+      <div class="seg" id="hvGroupBy">
+        <button class="segbtn active" data-v="node">Node</button>
+        <button class="segbtn" data-v="category">Category</button>
+        <button class="segbtn" data-v="item">Item</button>
+      </div>
+    </div>
+    <div class="hvbar-group">
+      <span class="hvbar-lbl">Measure</span>
+      <div class="seg" id="hvMeasure">
+        <button class="segbtn active" data-v="qty">Quantity</button>
+        <button class="segbtn" data-v="pulls">Pulls</button>
+        <button class="segbtn" data-v="rares">Rares</button>
+      </div>
+    </div>
+    <div class="hvbar-group">
+      <span class="hvbar-lbl">Chart</span>
+      <div class="seg" id="hvChartKind">
+        <button class="segbtn active" data-v="donut">Pie</button>
+        <button class="segbtn" data-v="bar">Bars</button>
+      </div>
+    </div>
+    <label class="checkfield hvbar-chk" title="Show only rare-tier items">
+      <input id="hvRareOnly" type="checkbox"><span>Rares only</span>
+    </label>
+    <span class="hvbar-spacer"></span>
+    <button class="btn tiny" id="hvExpandAll">Expand all</button>
+    <button class="btn tiny ghost" id="hvCollapseAll">Collapse</button>
+  </section>
+
   <div class="grid">
     <section class="panel chartpanel">
       <div class="panel-head">
-        <span>Harvests by category</span>
+        <span id="hvChartTitle">Distribution</span>
         <span class="muted" id="hvCatSub"></span>
       </div>
-      <div class="bd-donut" style="justify-content:center">
+      <div class="bd-donut" id="hvDonutWrap" style="justify-content:center">
         <canvas id="hvDonut"></canvas>
         <div class="legend" id="hvLegend"></div>
       </div>
+      <div class="dps-table" id="hvBarChart" style="display:none"></div>
     </section>
 
     <aside class="panel narrow">
       <div class="panel-head"><span>Parse past harvests</span></div>
-      <p class="hint">Scan a character's log for harvests in a time window and add
-        them to the totals below.</p>
+      <p class="hint">Scan a character's log (spanning archives) for a time window
+        and merge it into the totals.</p>
       <label class="field"><span>Character</span>
         <select id="hvImpChar"></select></label>
       <div class="row2">
@@ -168,10 +206,10 @@
 
     <section class="panel tablepanel" style="grid-column:1 / -1">
       <div class="panel-head">
-        <span>Harvested items</span>
+        <span id="hvTableTitle">By node</span>
         <span class="muted" id="hvTableSub"></span>
       </div>
-      <div class="dps-table" id="hvTable"></div>
+      <div class="hv-table" id="hvTable"></div>
     </section>
   </div>
 </main>

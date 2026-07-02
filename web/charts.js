@@ -6,7 +6,24 @@
     "#2dd4bf", "#facc15",
   ];
 
-  function colorFor(i) { return PALETTE[i % PALETTE.length]; }
+  // colors come from CSS custom properties so the theme picker restyles charts
+  const cssVars = () => getComputedStyle(document.documentElement);
+  let _pal = null, _ink = null;
+  function themeVar(name, fb) { const v = cssVars().getPropertyValue(name).trim(); return v || fb; }
+  function palette() {
+    if (_pal) return _pal;
+    const cs = cssVars(); const out = [];
+    for (let i = 1; i <= 12; i++) { const v = cs.getPropertyValue("--chart-" + i).trim(); if (v) out.push(v); }
+    _pal = out.length ? out : PALETTE; return _pal;
+  }
+  function ink() {
+    if (_ink) return _ink;
+    _ink = { grid: themeVar("--line", "#222a35"), label: themeVar("--dim", "#5a6573"),
+             text: themeVar("--text", "#d6dde7"), sub: themeVar("--muted", "#7d8896") };
+    return _ink;
+  }
+  function refreshPalette() { _pal = null; _ink = null; }
+  function colorFor(i) { const p = palette(); return p[i % p.length]; }
 
   function fmt(n) {
     n = +n || 0;
@@ -39,7 +56,7 @@
     const win = 1;
     const n = secs.length;
     if (n === 0 || names.length === 0) {
-      ctx.fillStyle = "#5a6573";
+      ctx.fillStyle = ink().label;
       ctx.font = "13px Inter, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("no data yet", cssW / 2, cssH / 2);
@@ -60,8 +77,8 @@
     const y = (v) => padT + H - (v / ymax) * H;
 
     // grid + y labels
-    ctx.strokeStyle = "#222a35";
-    ctx.fillStyle = "#5a6573";
+    ctx.strokeStyle = ink().grid;
+    ctx.fillStyle = ink().label;
     ctx.font = "10px JetBrains Mono, monospace";
     ctx.textAlign = "right";
     ctx.lineWidth = 1;
@@ -142,7 +159,7 @@
     const cx = size / 2, cy = size / 2, r = size / 2 - 6, inner = r * 0.58;
     const out = [];
     if (total <= 0) {
-      ctx.fillStyle = "#5a6573"; ctx.font = "13px Inter"; ctx.textAlign = "center";
+      ctx.fillStyle = ink().label; ctx.font = "13px Inter"; ctx.textAlign = "center";
       ctx.fillText("no data", cx, cy); return out;
     }
     let a0 = -Math.PI / 2;
@@ -163,13 +180,13 @@
     ctx.beginPath(); ctx.arc(cx, cy, inner, 0, Math.PI * 2); ctx.fill();
     ctx.globalCompositeOperation = "source-over";
     // center label
-    ctx.fillStyle = "#d6dde7"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = ink().text; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.font = "600 18px JetBrains Mono, monospace";
     ctx.fillText(fmt(total), cx, cy - 6);
-    ctx.fillStyle = "#7d8896"; ctx.font = "10px Inter";
+    ctx.fillStyle = ink().sub; ctx.font = "10px Inter";
     ctx.fillText(opts.centerLabel || "total", cx, cy + 12);
     return out;
   }
 
-  global.EQChart = { drawStacked, drawDonut, colorFor, fmt };
+  global.EQChart = { drawStacked, drawDonut, colorFor, fmt, refreshPalette };
 })(window);

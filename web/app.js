@@ -37,6 +37,36 @@
     try { history.replaceState(null, "", "#" + t.dataset.tab); } catch {}
   }));
 
+  /* ---------------- theme ---------------- */
+  const THEMES = [
+    { v: "midnight", label: "🌌 Midnight" },
+    { v: "neon", label: "💗 Neon Nights" },
+    { v: "cyber", label: "🩵 Cyber Teal" },
+    { v: "synthwave", label: "🌆 Synthwave" },
+    { v: "aurora", label: "🌿 Aurora" },
+    { v: "solar", label: "🔥 Solar Flare" },
+    { v: "frost", label: "❄ Frost (light)" },
+  ];
+  function applyTheme(v) {
+    if (v && v !== "midnight") document.body.dataset.theme = v;
+    else delete document.body.dataset.theme;
+    try { localStorage.setItem("eq2act_theme", v); } catch {}
+    if (EQChart.refreshPalette) EQChart.refreshPalette();
+    try { renderCurrentSelection(); } catch {}
+    if (typeof harvestActive === "function" && harvestActive() && harvestSnap) renderHarvest();
+  }
+  (function initTheme() {
+    const sel = $("#themeSelect");
+    sel.innerHTML = THEMES.map((t) =>
+      `<option value="${t.v}">${t.label}</option>`).join("");
+    let cur = "midnight";
+    try { cur = localStorage.getItem("eq2act_theme") || "midnight"; } catch {}
+    if (!THEMES.some((t) => t.v === cur)) cur = "midnight";
+    sel.value = cur;
+    applyTheme(cur);
+    sel.addEventListener("change", (e) => applyTheme(e.target.value));
+  })();
+
   /* ---------------- SSE ---------------- */
   let refreshQueued = false;
   function connectSSE() {
@@ -676,59 +706,180 @@
     setTimeout(() => { harvestQueued = false; loadHarvest(); }, 200);
   }
 
+  // view state for the analytics pivot
+  let harvestSnap = null;
+  let hvGroupBy = "node";      // node | category | item
+  let hvMeasure = "qty";       // qty | pulls | rares
+  let hvChartKind = "donut";   // donut | bar
+  let hvRareOnly = false;
+  const hvOpen = {};           // group key -> expanded?
+  const MEASURE_LBL = { qty: "Quantity", pulls: "Pulls", rares: "Rares" };
+  const GROUP_LBL = { node: "node", category: "category", item: "item" };
+
   async function loadHarvest() {
-    let s;
-    try { s = await api("/api/harvest"); } catch { return; }
+    try { harvestSnap = await api("/api/harvest"); } catch { return; }
+    const s = harvestSnap;
     $("#hvChar").textContent = s.character || "—";
     $("#hvQty").textContent = fmt(s.total_qty || 0);
-    $("#hvActions").textContent = fmt(s.total_actions || 0);
+    $("#hvActions").textContent = fmt(s.total_pulls || 0);
+    $("#hvNodes").textContent = fmt(s.unique_nodes || 0);
     $("#hvUnique").textContent = fmt(s.unique_items || 0);
     $("#hvRares").textContent = fmt(s.rare_total || 0);
     $("#hvEnabled").checked = !!s.enabled;
-    renderHarvestDonut(s.categories || []);
-    renderHarvestTable(s.items || []);
-    // keep the import char picker populated (reuses the live char list)
     loadCharacters(s.character);
+    renderHarvest();
   }
 
-  function renderHarvestDonut(cats) {
-    const canvas = $("#hvDonut");
-    const legend = EQChart.drawDonut(canvas,
-      cats.map((c) => ({ label: c.label, value: c.value })),
-      { size: 220, centerLabel: "harvested" });
-    $("#hvCatSub").textContent = cats.length
-      ? cats.length + " categor" + (cats.length === 1 ? "y" : "ies") : "";
+  // pivot the flat item list into groups by the chosen dimension + measure
+  function harvestGroups() {
+    if (!harvestSnap) return { groups: [], total: 0 };
+    let items = harvestSnap.items || [];
+    if (hvRareOnly) items = items.filter((it) => it.is_rare);
+    const mv = (o) => o[hvMeasure] || 0;
+    const total = items.reduce((s, it) => s + mv(it), 0) || 1;
+    if (hvGroupBy === "item") {
+      const groups = items.map((it) => ({
+        key: it.item, category: it.category, node: it.node, leaf: true,
+        qty: it.qty, pulls: it.pulls, rares: it.rares, is_rare: it.is_rare,
+        val: mv(it), items: [],
+      })).filter((g) => g.val > 0).sort((a, b) => b.val - a.val);
+      return { groups, total };
+    }
+    const map = new Map();
+    items.forEach((it) => {
+      const k = (hvGroupBy === "node" ? it.node : it.category) || "—";
+      let g = map.get(k);
+      if (!g) { g = { key: k, category: it.category, qty: 0, pulls: 0, rares: 0,
+                      val: 0, items: [] }; map.set(k, g); }
+      g.qty += it.qty; g.pulls += it.pulls; g.rares += it.rares;
+      g.val += mv(it); g.items.push(it);
+    });
+    const groups = [...map.values()].filter((g) => g.val > 0)
+      .sort((a, b) => b.val - a.val);
+    groups.forEach((g) => g.items.sort((a, b) => mv(b) - mv(a)));
+    return { groups, total };
+  }
+
+  function renderHarvest() {
+    if (!harvestSnap) return;
+    const { groups, total } = harvestGroups();
+    $("#hvTableTitle").textContent =
+      "By " + GROUP_LBL[hvGroupBy] + " · " + MEASURE_LBL[hvMeasure].toLowerCase();
+    $("#hvChartTitle").textContent = MEASURE_LBL[hvMeasure] + " by " + GROUP_LBL[hvGroupBy];
+    renderHarvestChart(groups, total);
+    renderHarvestTable(groups, total);
+  }
+
+  function renderHarvestChart(groups, total) {
+    const top = groups.slice(0, 12);
+    $("#hvCatSub").textContent = groups.length
+      ? groups.length + " " + GROUP_LBL[hvGroupBy] + (groups.length === 1 ? "" : "s") : "";
+    const donutWrap = $("#hvDonutWrap"), barEl = $("#hvBarChart");
+    if (hvChartKind === "bar") {
+      donutWrap.style.display = "none"; barEl.style.display = "";
+      const max = top.length ? top[0].val : 1;
+      barEl.innerHTML = top.map((g, i) => {
+        const col = EQChart.colorFor(i);
+        const w = Math.max(2, (g.val / max) * 100);
+        return `<div class="dps-row"><div class="dps-bar" style="width:${w}%;background:${col}"></div>` +
+          `<div class="dps-rank">${i + 1}</div>` +
+          `<div class="dps-name">${esc(g.key)}</div>` +
+          `<div class="dps-dps">${fmt(g.val)}</div>` +
+          `<div class="dps-pct">${(100 * g.val / total).toFixed(1)}%</div></div>`;
+      }).join("") || '<div class="muted" style="padding:12px">no data</div>';
+      return;
+    }
+    donutWrap.style.display = ""; barEl.style.display = "none";
+    const legend = EQChart.drawDonut($("#hvDonut"),
+      top.map((g) => ({ label: g.key, value: g.val })),
+      { size: 220, centerLabel: MEASURE_LBL[hvMeasure].toLowerCase() });
     $("#hvLegend").innerHTML = legend.map((l) =>
       `<span class="lg"><i style="background:${l.color}"></i>` +
       `${esc(l.label)} <b>${fmt(l.value)}</b> · ${l.pct.toFixed(0)}%</span>`).join("");
   }
 
-  function renderHarvestTable(items) {
+  function renderHarvestTable(groups, total) {
     const el = $("#hvTable");
-    if (!items.length) {
+    if (!groups.length) {
       el.innerHTML = '<div class="muted" style="padding:14px">No harvests yet — ' +
-        'gather something with Live tracking on, or parse a past log.</div>';
+        'gather with Live on, or parse a past log' +
+        (hvRareOnly ? ' (no rares in range)' : '') + '.</div>';
       $("#hvTableSub").textContent = "";
       return;
     }
-    const max = items[0].qty || 1;
-    $("#hvTableSub").textContent = items.length + " items";
-    el.innerHTML = items.map((it, i) => {
+    $("#hvTableSub").textContent = groups.length + " " + GROUP_LBL[hvGroupBy] +
+      (groups.length === 1 ? "" : "s") + " · " + fmt(total) + " " + hvMeasure;
+    const max = groups[0].val || 1;
+    const parts = [];
+    groups.forEach((g, i) => {
       const col = EQChart.colorFor(i);
-      const w = Math.max(2, (it.qty / max) * 100);
-      const rare = it.rares ? `<span class="tag" title="rare pulls">✦ ${it.rares}</span>` : "";
-      return `<div class="dps-row">` +
+      const w = Math.max(2, (g.val / max) * 100);
+      const pct = (100 * g.val / total).toFixed(1);
+      const open = hvOpen[g.key];
+      const rareBadge = g.rares ? `<span class="hv-rare">✦ ${g.rares}</span>` : "";
+      if (g.leaf) {
+        // group-by-item: flat rows, no expansion
+        parts.push(
+          `<div class="hv-grow leaf"><div class="dps-bar" style="width:${w}%;background:${col}"></div>` +
+          `<div class="dps-rank">${i + 1}</div>` +
+          `<div class="hv-gname">${esc(g.key)}` +
+            `<span class="hv-sub">${esc(g.category)}${g.node ? " · " + esc(g.node) : ""}</span>` +
+            (g.is_rare ? ` <span class="hv-rare">✦ rare</span>` : "") + `</div>` +
+          `<div class="hv-nums"><b>${fmt(g.val)}</b><span>${fmt(g.qty)} / ${g.pulls}p</span></div>` +
+          `<div class="dps-pct">${pct}%</div></div>`);
+        return;
+      }
+      parts.push(
+        `<div class="hv-grow head${open ? " open" : ""}" data-k="${escA(g.key)}">` +
         `<div class="dps-bar" style="width:${w}%;background:${col}"></div>` +
-        `<div class="dps-rank">${i + 1}</div>` +
-        `<div class="dps-name">${esc(it.item)}` +
-          `<span class="tag" style="color:var(--dim)">${esc(it.category)}` +
-          (it.node ? " · " + esc(it.node) : "") + `</span>${rare}</div>` +
-        `<div class="dps-dps">${fmt(it.qty)}</div>` +
-        `<div class="dps-amt">${it.actions} pulls</div>` +
-        `<div class="dps-pct">${(it.pct || 0).toFixed(1)}%</div>` +
-      `</div>`;
-    }).join("");
+        `<div class="hv-caret">${open ? "▾" : "▸"}</div>` +
+        `<div class="hv-gname">${esc(g.key)}` +
+          `<span class="hv-sub">${esc(g.category)} · ${g.items.length} item${g.items.length === 1 ? "" : "s"}</span>` +
+          rareBadge + `</div>` +
+        `<div class="hv-nums"><b>${fmt(g.val)}</b><span>${fmt(g.qty)} / ${g.pulls}p</span></div>` +
+        `<div class="dps-pct">${pct}%</div></div>`);
+      if (!open) return;
+      const gmax = g.items.reduce((m, it) => Math.max(m, it[hvMeasure] || 0), 0) || 1;
+      g.items.forEach((it) => {
+        const v = it[hvMeasure] || 0;
+        const iw = Math.max(2, (v / gmax) * 100);
+        parts.push(
+          `<div class="hv-irow${it.is_rare ? " rare" : ""}">` +
+          `<div class="hv-ibar" style="width:${iw}%"></div>` +
+          `<div class="hv-iname">${esc(it.item)}` +
+            (it.is_rare ? ` <span class="hv-rare">✦</span>` : "") + `</div>` +
+          `<div class="hv-inode">${esc(hvGroupBy === "node" ? it.category : it.node)}</div>` +
+          `<div class="hv-inums">${fmt(it.qty)} <span>/ ${it.pulls}p</span></div>` +
+          `<div class="hv-ival">${fmt(v)}</div></div>`);
+      });
+    });
+    el.innerHTML = parts.join("");
+    $$("#hvTable .hv-grow.head").forEach((row) => row.addEventListener("click", () => {
+      const k = row.dataset.k; hvOpen[k] = !hvOpen[k];
+      renderHarvest();
+    }));
   }
+
+  // segmented control wiring
+  function segWire(id, apply) {
+    $("#" + id).addEventListener("click", (e) => {
+      const b = e.target.closest(".segbtn"); if (!b) return;
+      $$("#" + id + " .segbtn").forEach((x) => x.classList.toggle("active", x === b));
+      apply(b.dataset.v);
+      renderHarvest();
+    });
+  }
+  segWire("hvGroupBy", (v) => { hvGroupBy = v; });
+  segWire("hvMeasure", (v) => { hvMeasure = v; });
+  segWire("hvChartKind", (v) => { hvChartKind = v; });
+  $("#hvRareOnly").addEventListener("change", (e) => { hvRareOnly = e.target.checked; renderHarvest(); });
+  $("#hvExpandAll").addEventListener("click", () => {
+    harvestGroups().groups.forEach((g) => { if (!g.leaf) hvOpen[g.key] = true; });
+    renderHarvest();
+  });
+  $("#hvCollapseAll").addEventListener("click", () => {
+    for (const k in hvOpen) delete hvOpen[k]; renderHarvest();
+  });
 
   $("#hvEnabled").addEventListener("change", async (e) => {
     await post("/api/settings", { harvest_enabled: e.target.checked });

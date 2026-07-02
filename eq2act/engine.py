@@ -550,7 +550,7 @@ class Engine:
         self._broadcast({"type": "harvest"})
         return {"ok": True, "character": me,
                 "imported_qty": added["total_qty"],
-                "imported_actions": added["total_actions"],
+                "imported_actions": added["total_pulls"],
                 "imported_items": added["unique_items"],
                 "imported_rares": added["rare_total"]}
 
