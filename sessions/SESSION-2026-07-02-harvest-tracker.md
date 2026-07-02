@@ -92,6 +92,27 @@ on in Settings when you want it. Verified end-to-end on synthetic + temp-copied
 real logs: roll → correct span name → live truncated → import pulls fights AND
 harvests from archive+live in one pass; archive excluded from char list.
 
+## Analytics rework + theme picker (same session, later)
+- **Two data bugs fixed in `harvest.py`:** (1) the `forest` verb was missing, so
+  all wood harvesting (1600+ lines) was dropped; (2) rare attribution was
+  *backwards* — the rare is the item on the line AFTER the "found a rare" banner
+  (oak root, alkaline loam, severed bone…), not the common item before it. Rares
+  now surface as their own line items; the 197 attributed rares reconcile exactly
+  with the 197 banner lines. `snapshot()` now pre-groups by node + category
+  (qty/pulls/rares + nested items), reports `total_pulls`/`unique_nodes`, and
+  flags per-item `is_rare`. Renamed item `actions`→`pulls` (load() tolerates old).
+- **Harvest tab is now a configurable pivot:** Group by Node|Category|Item ×
+  Measure by Quantity|Pulls|Rares, Pie/Bars toggle, collapsible group rows with
+  per-item breakdown bars, Rares-only filter, expand/collapse all. Grouping is
+  done client-side from the flat `items` list for flexibility.
+- **Theme picker:** 7 themes (Midnight default, Neon, Cyber Teal, Synthwave,
+  Aurora, Solar, Frost-light) as `body[data-theme]` CSS-variable sets incl.
+  `--chart-1..12`. `charts.js` now reads colors/ink from CSS vars
+  (`EQChart.refreshPalette()` on switch) so canvas charts restyle too. Selector
+  in the top bar, persisted to `localStorage["eq2act_theme"]`.
+- **Cloudflare / act.jsb-emr.us: dropped** by the user — it's a local app reading
+  local logs, so a public URL wouldn't help others (they run it locally). Not built.
+
 ## Not done / possible next
 - Arbitrary-file picker for import (archived logs).
 - Harvest-rate over time (harvests/hr) chart; per-zone harvest breakdown
