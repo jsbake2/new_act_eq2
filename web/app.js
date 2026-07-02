@@ -30,8 +30,12 @@
     const v = $("#" + name); if (v) v.classList.add("active");
     if (name === "triggers") loadTriggers();
     if (name === "settings") loadSettings();
+    if (name === "harvest") loadHarvest();
   }
-  $$(".tab").forEach((t) => t.addEventListener("click", () => activateTab(t.dataset.tab)));
+  $$(".tab").forEach((t) => t.addEventListener("click", () => {
+    activateTab(t.dataset.tab);
+    try { history.replaceState(null, "", "#" + t.dataset.tab); } catch {}
+  }));
 
   /* ---------------- SSE ---------------- */
   let refreshQueued = false;
@@ -43,6 +47,8 @@
       let msg; try { msg = JSON.parse(e.data); } catch { return; }
       if (msg.type === "trigger") return fireTrigger(msg);
       if (msg.type === "paste") { firePaste(msg); return queueRefresh(); }
+      if (msg.type === "harvest") { if (harvestActive()) queueHarvest(); return; }
+      if (msg.type === "archived") { fireArchived(msg); return; }
       if (msg.type === "live" || msg.type === "fight_closed") queueRefresh();
     };
   }
@@ -483,7 +489,70 @@
     $("#setAutoCopy").checked = settings.autocopy_enabled !== false;
     $("#setAutoSecs").value = settings.autocopy_min_seconds ?? 30;
     $("#setAutoDmg").value = settings.autocopy_min_damage ?? 0;
+    loadArchive();
   }
+
+  async function loadArchive() {
+    let a;
+    try { a = await api("/api/archive"); } catch { return; }
+    $("#setArchive").checked = !!a.enabled;
+    $("#setArchiveMB").value = a.max_mb ?? 50;
+    $("#setArchiveRet").value = a.retention_days ?? 0;
+    $("#setArchiveDir").value = a.archive_dir || "";
+    const mb = (a.live_bytes || 0) / 1048576;
+    const cap = a.max_mb || 0;
+    $("#hvLiveSize").textContent =
+      `live log ${mb.toFixed(1)} MB` + (cap ? ` / ${cap} MB cap` : "");
+    $("#hvLiveSize").style.color = cap && mb >= cap ? "var(--bad)"
+      : (cap && mb >= cap * 0.8 ? "var(--warn, #e3b341)" : "var(--muted)");
+    const arr = a.archives || [];
+    $("#archiveCount").textContent = arr.length
+      ? arr.length + " file" + (arr.length === 1 ? "" : "s") : "none yet";
+    $("#archiveList").innerHTML = arr.length
+      ? arr.slice().reverse().map((x) => {
+          const span = spanStr(x.first, x.last);
+          return `<span class="rchip" title="${escA(x.path)}">` +
+            `${esc(x.character)} · ${span} · ${(x.bytes / 1048576).toFixed(1)}MB</span>`;
+        }).join("")
+      : '<span class="muted">Archives appear here once the log rolls.</span>';
+  }
+  function spanStr(a, b) {
+    const d = (t) => { if (!t) return "?"; const x = new Date(t * 1000);
+      return (x.getMonth() + 1) + "/" + x.getDate(); };
+    return d(a) + "–" + d(b);
+  }
+
+  $("#btnSaveArchive").addEventListener("click", async () => {
+    await post("/api/settings", {
+      archive_enabled: $("#setArchive").checked,
+      archive_max_mb: parseInt($("#setArchiveMB").value) || 50,
+      archive_retention_days: parseInt($("#setArchiveRet").value) || 0,
+      archive_dir: $("#setArchiveDir").value.trim(),
+    });
+    flashToast("Archiving saved", $("#setArchive").checked
+      ? "auto-roll on" : "auto-roll off", "ding");
+    loadArchive();
+  });
+  $("#btnRollNow").addEventListener("click", async () => {
+    if (!confirm("Roll the live log into an archive now? The game keeps writing " +
+      "to a fresh file; nothing is lost.")) return;
+    const btn = $("#btnRollNow"); btn.disabled = true;
+    $("#archiveResult").textContent = "rolling…";
+    try {
+      const r = await post("/api/archive/rotate", {});
+      if (r.ok) {
+        $("#archiveResult").textContent =
+          `rolled ${(r.bytes / 1048576).toFixed(1)} MB` +
+          (r.pruned ? `, pruned ${r.pruned} old` : "");
+        $("#archiveResult").style.color = "var(--good)";
+      } else {
+        $("#archiveResult").textContent = r.error || "nothing to roll";
+        $("#archiveResult").style.color = "var(--muted)";
+      }
+    } catch { $("#archiveResult").textContent = "failed"; }
+    btn.disabled = false;
+    loadArchive();
+  });
   $("#btnSaveSettings").addEventListener("click", async () => {
     const patch = {
       log_path: $("#setLogPath").value.trim(),
@@ -520,7 +589,7 @@
     const now = Date.now();
     let data;
     try { data = await api("/api/characters"); } catch { return; }
-    const sel = $("#charSelect"), imp = $("#impChar");
+    const sel = $("#charSelect"), imp = $("#impChar"), hvImp = $("#hvImpChar");
     const opts = data.characters.map((c) => {
       const ago = c.mtime ? Math.round((Date.now() / 1000 - c.mtime) / 60) : 0;
       const tag = ago < 3 ? " ●" : "";
@@ -536,7 +605,7 @@
     // only repopulate live selector if the option set changed (avoid clobbering)
     const sig = opts.map((o) => o.v).join(",");
     if (sig !== charsLoaded._sig) {
-      fill(sel); fill(imp);
+      fill(sel); fill(imp); fill(hvImp);
       charsLoaded = { _sig: sig };
     }
     if (current && sel && !sel.dataset.touched) sel.value = current;
@@ -598,6 +667,112 @@
     btn.disabled = false;
   });
 
+  /* ---------------- harvest ---------------- */
+  function harvestActive() { return $("#harvest").classList.contains("active"); }
+  let harvestQueued = false;
+  function queueHarvest() {
+    if (harvestQueued) return;
+    harvestQueued = true;
+    setTimeout(() => { harvestQueued = false; loadHarvest(); }, 200);
+  }
+
+  async function loadHarvest() {
+    let s;
+    try { s = await api("/api/harvest"); } catch { return; }
+    $("#hvChar").textContent = s.character || "—";
+    $("#hvQty").textContent = fmt(s.total_qty || 0);
+    $("#hvActions").textContent = fmt(s.total_actions || 0);
+    $("#hvUnique").textContent = fmt(s.unique_items || 0);
+    $("#hvRares").textContent = fmt(s.rare_total || 0);
+    $("#hvEnabled").checked = !!s.enabled;
+    renderHarvestDonut(s.categories || []);
+    renderHarvestTable(s.items || []);
+    // keep the import char picker populated (reuses the live char list)
+    loadCharacters(s.character);
+  }
+
+  function renderHarvestDonut(cats) {
+    const canvas = $("#hvDonut");
+    const legend = EQChart.drawDonut(canvas,
+      cats.map((c) => ({ label: c.label, value: c.value })),
+      { size: 220, centerLabel: "harvested" });
+    $("#hvCatSub").textContent = cats.length
+      ? cats.length + " categor" + (cats.length === 1 ? "y" : "ies") : "";
+    $("#hvLegend").innerHTML = legend.map((l) =>
+      `<span class="lg"><i style="background:${l.color}"></i>` +
+      `${esc(l.label)} <b>${fmt(l.value)}</b> · ${l.pct.toFixed(0)}%</span>`).join("");
+  }
+
+  function renderHarvestTable(items) {
+    const el = $("#hvTable");
+    if (!items.length) {
+      el.innerHTML = '<div class="muted" style="padding:14px">No harvests yet — ' +
+        'gather something with Live tracking on, or parse a past log.</div>';
+      $("#hvTableSub").textContent = "";
+      return;
+    }
+    const max = items[0].qty || 1;
+    $("#hvTableSub").textContent = items.length + " items";
+    el.innerHTML = items.map((it, i) => {
+      const col = EQChart.colorFor(i);
+      const w = Math.max(2, (it.qty / max) * 100);
+      const rare = it.rares ? `<span class="tag" title="rare pulls">✦ ${it.rares}</span>` : "";
+      return `<div class="dps-row">` +
+        `<div class="dps-bar" style="width:${w}%;background:${col}"></div>` +
+        `<div class="dps-rank">${i + 1}</div>` +
+        `<div class="dps-name">${esc(it.item)}` +
+          `<span class="tag" style="color:var(--dim)">${esc(it.category)}` +
+          (it.node ? " · " + esc(it.node) : "") + `</span>${rare}</div>` +
+        `<div class="dps-dps">${fmt(it.qty)}</div>` +
+        `<div class="dps-amt">${it.actions} pulls</div>` +
+        `<div class="dps-pct">${(it.pct || 0).toFixed(1)}%</div>` +
+      `</div>`;
+    }).join("");
+  }
+
+  $("#hvEnabled").addEventListener("change", async (e) => {
+    await post("/api/settings", { harvest_enabled: e.target.checked });
+    flashToast("Harvest tracking", e.target.checked ? "on" : "off", "ding");
+  });
+  $("#hvClear").addEventListener("click", async () => {
+    if (!confirm("Reset this character's harvest totals?")) return;
+    await post("/api/harvest/clear", {});
+    loadHarvest();
+  });
+  $("#hvQuickRange").addEventListener("click", (e) => {
+    const r = e.target.dataset.range; if (!r) return;
+    const now = new Date(); let from = null, to = now;
+    if (r === "all") { from = null; to = null; }
+    else if (r === "2h") { from = new Date(now - 2 * 3600e3); }
+    else if (r === "week") { from = new Date(now - 7 * 86400e3); }
+    else if (r === "today") { from = new Date(now); from.setHours(0, 0, 0, 0); }
+    $("#hvFrom").value = from ? fmtLocal(from) : "";
+    $("#hvTo").value = to ? fmtLocal(to) : "";
+  });
+  $("#hvImport").addEventListener("click", async () => {
+    const btn = $("#hvImport"); btn.disabled = true;
+    $("#hvImpResult").textContent = "parsing…";
+    try {
+      const res = await post("/api/harvest/import", {
+        character: $("#hvImpChar").value,
+        start_ts: toEpoch($("#hvFrom").value),
+        end_ts: toEpoch($("#hvTo").value),
+      });
+      if (res.ok) {
+        $("#hvImpResult").textContent = res.imported_qty
+          ? `+${res.imported_qty} harvested (${res.imported_items} items, ` +
+            `${res.imported_rares} rare) merged in`
+          : "no harvests found in that range";
+        $("#hvImpResult").style.color = res.imported_qty ? "var(--good)" : "var(--muted)";
+        loadHarvest();
+      } else {
+        $("#hvImpResult").textContent = "error: " + res.error;
+        $("#hvImpResult").style.color = "var(--bad)";
+      }
+    } catch (e) { $("#hvImpResult").textContent = "failed"; }
+    btn.disabled = false;
+  });
+
   /* ---------------- notifications ---------------- */
   let audioCtx = null;
   function ctx() { return audioCtx || (audioCtx = new (window.AudioContext || window.webkitAudioContext)()); }
@@ -648,6 +823,16 @@
     setTimeout(() => { t.style.opacity = "0"; t.style.transition = "opacity .5s";
       setTimeout(() => t.remove(), 500); }, 8000);
   }
+  function fireArchived(msg) {
+    if (msg.pruned && !msg.bytes) {
+      flashToast("Archives pruned", msg.pruned + " old log(s) deleted", "ding");
+    } else {
+      const mb = msg.bytes ? (msg.bytes / 1048576).toFixed(1) + " MB" : "";
+      flashToast("Log rolled", `${esc(msg.character || "")} — ${mb} archived` +
+        (msg.reason === "auto" ? " (auto)" : ""), "ding");
+    }
+    if ($("#settings").classList.contains("active")) loadArchive();
+  }
   function flashToast(title, body, kind) {
     const t = document.createElement("div");
     t.className = "toast" + (kind === "alarm" ? " alarm" : "");
@@ -677,6 +862,8 @@
   }, 1000);
 
   /* ---------------- boot ---------------- */
+  const initialTab = (location.hash || "").replace("#", "");
+  if (["harvest", "triggers", "settings"].includes(initialTab)) activateTab(initialTab);
   connectSSE();
   refreshAll();
   setInterval(refreshAll, 3000);   // safety poll in case SSE drops

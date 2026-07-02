@@ -15,6 +15,7 @@
   </div>
   <nav class="tabs">
     <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="harvest">Harvest</button>
     <button class="tab" data-tab="triggers">Triggers</button>
     <button class="tab" data-tab="settings">Settings</button>
   </nav>
@@ -96,6 +97,81 @@
     <section class="panel enemypanel">
       <div class="panel-head"><span>Incoming / enemies</span></div>
       <div class="dps-table small" id="enemyTable"></div>
+    </section>
+  </div>
+</main>
+
+<!-- ================= HARVEST ================= -->
+<main id="harvest" class="view">
+  <section class="stripwrap">
+    <div class="stat">
+      <div class="stat-label">CHARACTER</div>
+      <div class="stat-val" id="hvChar">—</div>
+    </div>
+    <div class="stat accent">
+      <div class="stat-label">TOTAL HARVESTED</div>
+      <div class="stat-val mono big" id="hvQty">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">HARVEST ACTIONS</div>
+      <div class="stat-val mono" id="hvActions">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">UNIQUE ITEMS</div>
+      <div class="stat-val mono" id="hvUnique">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">RARES ✦</div>
+      <div class="stat-val mono" id="hvRares">0</div>
+    </div>
+    <div class="stat-actions">
+      <label class="checkfield" style="margin:0" title="Track harvests from the live log">
+        <input id="hvEnabled" type="checkbox"><span>Live tracking</span>
+      </label>
+      <button class="btn ghost" id="hvClear" title="Reset this character's harvest totals">Clear</button>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel chartpanel">
+      <div class="panel-head">
+        <span>Harvests by category</span>
+        <span class="muted" id="hvCatSub"></span>
+      </div>
+      <div class="bd-donut" style="justify-content:center">
+        <canvas id="hvDonut"></canvas>
+        <div class="legend" id="hvLegend"></div>
+      </div>
+    </section>
+
+    <aside class="panel narrow">
+      <div class="panel-head"><span>Parse past harvests</span></div>
+      <p class="hint">Scan a character's log for harvests in a time window and add
+        them to the totals below.</p>
+      <label class="field"><span>Character</span>
+        <select id="hvImpChar"></select></label>
+      <div class="row2">
+        <label class="field"><span>From (blank = start)</span>
+          <input id="hvFrom" type="datetime-local"></label>
+        <label class="field"><span>To (blank = end)</span>
+          <input id="hvTo" type="datetime-local"></label>
+      </div>
+      <div class="quickrange" id="hvQuickRange">
+        <button class="btn tiny ghost" data-range="today">Today</button>
+        <button class="btn tiny ghost" data-range="2h">Last 2h</button>
+        <button class="btn tiny ghost" data-range="week">Last 7d</button>
+        <button class="btn tiny ghost" data-range="all">Whole log</button>
+      </div>
+      <button class="btn primary" id="hvImport" style="margin-top:12px">Parse harvests</button>
+      <span id="hvImpResult" class="muted" style="margin-left:8px"></span>
+    </aside>
+
+    <section class="panel tablepanel" style="grid-column:1 / -1">
+      <div class="panel-head">
+        <span>Harvested items</span>
+        <span class="muted" id="hvTableSub"></span>
+      </div>
+      <div class="dps-table" id="hvTable"></div>
     </section>
   </div>
 </main>
@@ -231,6 +307,45 @@
     </div>
     <button class="btn primary" id="btnImport" style="margin-top:12px">Parse range</button>
     <span id="impResult" class="muted" style="margin-left:10px"></span>
+    <p class="hint" style="margin-top:10px">Date-range parses automatically span any
+      rolled-off <b>archives</b> plus the live log — see Log archiving below.</p>
+  </section>
+
+  <section class="panel narrow" style="margin-top:16px">
+    <div class="panel-head"><span>Log archiving</span>
+      <span class="muted" id="hvLiveSize">—</span></div>
+    <p class="hint">EQ2 never rotates its log — it appends to one file forever
+      (weeks = 24&nbsp;MB+). Turn this on to auto-roll the live log into an archive
+      once it passes a size cap, so it never gets out of hand. Rolling is
+      <b>copytruncate</b>: the tool copies the log, then truncates the original in
+      place — the game keeps writing seamlessly and no fights are lost (rolls wait
+      for a combat lull). Archived data stays fully searchable by date range above.</p>
+    <label class="checkfield">
+      <input id="setArchive" type="checkbox">
+      <span>Auto-roll the live log when it gets big</span>
+    </label>
+    <div class="row2">
+      <label class="field">
+        <span>Roll at size (MB)</span>
+        <input id="setArchiveMB" type="number" min="5" max="2000" step="5">
+      </label>
+      <label class="field">
+        <span>Delete archives older than (days, 0 = keep)</span>
+        <input id="setArchiveRet" type="number" min="0" max="3650" step="1">
+      </label>
+    </div>
+    <label class="field">
+      <span>Archive folder</span>
+      <input id="setArchiveDir" placeholder="(blank = <logs>/eq2act_archive)">
+    </label>
+    <div class="modal-actions" style="justify-content:flex-start;gap:8px">
+      <button class="btn primary" id="btnSaveArchive">Save archiving</button>
+      <button class="btn" id="btnRollNow" title="Roll the live log into an archive right now">Archive now</button>
+      <span id="archiveResult" class="muted"></span>
+    </div>
+    <div class="panel-head" style="margin-top:14px"><span>Archives</span>
+      <span class="muted" id="archiveCount"></span></div>
+    <div id="archiveList" class="roster"></div>
   </section>
 </main>
 

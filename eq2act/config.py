@@ -18,6 +18,11 @@ DEFAULTS = {
     "autocopy_enabled": True,     # copy a fight's parse to the clipboard on end
     "autocopy_min_seconds": 30.0, # ...only if the fight lasted at least this long
     "autocopy_min_damage": 0,     # ...and dealt at least this much (0 = no min)
+    "harvest_enabled": True,      # track resource harvests (gather/mine/trap/…)
+    "archive_enabled": False,     # auto-roll the live log when it gets big
+    "archive_max_mb": 50,         # ...at this size (copytruncate into archive_dir)
+    "archive_dir": "",            # where rolls go ("" = <logs>/eq2act_archive)
+    "archive_retention_days": 0,  # delete archives older than N days (0 = keep forever)
 }
 
 

@@ -9,9 +9,14 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import time
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
+
+# our own rolled-off logs live under logs/eq2act_archive/ and are named
+# eq2log_<Char>__<first>-<last>.txt — never treat those as a live character log
+_ARCHIVE_MARK = re.compile(r"__\d+-\d+(?:\.\d+)?\.txt$")
 
 # Common EQ2 logs locations to probe when no log_dir is configured.
 _CANDIDATE_DIRS = [
@@ -36,7 +41,11 @@ def _all_logs(log_dir: str) -> List[str]:
     out: List[str] = []
     for p in pats:
         out.extend(glob.glob(p))
-    return out
+    # drop our archive folder + archive-named files so they never show up as a
+    # live character or get followed by the latest-log watcher
+    return [p for p in out
+            if os.path.basename(os.path.dirname(p)) != "eq2act_archive"
+            and not _ARCHIVE_MARK.search(os.path.basename(p))]
 
 
 def find_log_dir(configured: str = "") -> str:

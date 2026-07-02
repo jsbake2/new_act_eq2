@@ -11,8 +11,10 @@ from typing import Callable, List, Optional
 from .config import Settings
 from .discover import (char_from_path, find_latest_log, find_log_dir,
                        _all_logs)
+from . import archive
 from .encounter import EncounterManager, Fight
 from .group import GroupTracker
+from .harvest import HarvestTracker
 import re
 
 from .parser import LINE_RE, Parser
@@ -45,6 +47,14 @@ class Engine:
         self._last_combo = None         # most recent aggregate (for detail/paste)
         self.roster_path = Path(db_path).parent / "roster.json"
         self._load_roster(self.group.me)
+        # harvest tracking (independent of combat — see harvest.py)
+        self.harvest = HarvestTracker()
+        self.harvest_path = Path(db_path).parent / "harvests.json"
+        self._harvest_dirty = False
+        self._last_harvest_emit = 0.0
+        self._last_harvest_save = 0.0
+        self._load_harvest(self.group.me)
+        self._last_rotate_check = 0.0
 
     # -- listener plumbing ----------------------------------------------------
     def add_listener(self, fn: Callable[[dict], None]) -> None:
@@ -115,6 +125,30 @@ class Engine:
             except OSError:
                 pass
 
+    # -- harvest persistence (cumulative totals per character) -----------------
+    def _load_harvest(self, character: str) -> None:
+        import json
+        try:
+            data = json.loads(self.harvest_path.read_text())
+            self.harvest.load(data.get(character, {}))
+        except (OSError, ValueError):
+            self.harvest.clear()
+
+    def _save_harvest(self) -> None:
+        import json
+        data = {}
+        try:
+            data = json.loads(self.harvest_path.read_text())
+        except (OSError, ValueError):
+            pass
+        data[self.group.me] = self.harvest.to_dict()
+        try:
+            self.harvest_path.parent.mkdir(parents=True, exist_ok=True)
+            self.harvest_path.write_text(json.dumps(data, indent=2))
+            self._harvest_dirty = False
+        except OSError:
+            pass
+
     def _on_fight_closed(self) -> None:
         # persist any newly-closed fight exactly once, and auto-copy its parse
         newly = []
@@ -163,12 +197,27 @@ class Engine:
             self.triggers.feed(msg, ts)
             # group roster / membership lines
             self.group.observe_text(msg)
+            # resource harvesting (independent of combat)
+            if self.settings.get("harvest_enabled") and self.harvest.feed(msg, ts):
+                self._harvest_dirty = True
+                self._maybe_emit_harvest()
+                return
             # combat
             ev = self.parser.parse_message(msg, ts, raw=line)
             if ev is not None:
                 self.events_seen += 1
                 self.encounters.feed(ev)
                 self._maybe_emit_live()
+
+    def _maybe_emit_harvest(self) -> None:
+        now = time.time()
+        if now - self._last_harvest_emit >= 0.5:
+            self._last_harvest_emit = now
+            self._broadcast({"type": "harvest"})
+        # persist at most every 10s on the hot path (also saved on switch/exit)
+        if now - self._last_harvest_save >= 10.0:
+            self._last_harvest_save = now
+            self._save_harvest()
 
     def _maybe_emit_live(self) -> None:
         now = time.time()
@@ -185,6 +234,83 @@ class Engine:
                 pass  # on_change already broadcast
             else:
                 self._broadcast({"type": "live"})
+        # log rolling runs outside the lock (it does file IO); self-throttled
+        self.maybe_rotate()
+
+    # -- log archiving (roll oversized live logs) ------------------------------
+    def _archive_dir(self) -> str:
+        return archive.archive_dir_for(self.log_dir, self.settings.get("archive_dir"))
+
+    def maybe_rotate(self) -> None:
+        """Roll the live log into an archive when it exceeds the size cap — but
+        only during a combat lull, so an in-progress fight is never disturbed."""
+        if not self.settings.get("archive_enabled"):
+            return
+        now = time.time()
+        if now - self._last_rotate_check < 15.0:
+            return
+        self._last_rotate_check = now
+        path = self.settings.get("log_path")
+        if not path:
+            return
+        import os
+        try:
+            size = os.path.getsize(path)
+        except OSError:
+            return
+        self._prune_archives()      # enforce retention even between rolls
+        cap = float(self.settings.get("archive_max_mb")) * 1024 * 1024
+        if cap <= 0 or size < cap:
+            return
+        # defer while a fight is live — roll only when the log is quiet
+        cur = self.encounters.current
+        if cur is not None and not cur.closed:
+            return
+        self.rotate_now(reason="auto")
+
+    def _prune_archives(self) -> list:
+        removed = archive.prune(self._archive_dir(),
+                                float(self.settings.get("archive_retention_days") or 0),
+                                time.time())
+        if removed:
+            self._broadcast({"type": "archived", "pruned": len(removed),
+                             "reason": "retention"})
+        return removed
+
+    def rotate_now(self, reason: str = "manual") -> dict:
+        """Copytruncate the live log now. The tailer notices the shrink and
+        reopens transparently; fights already parsed stay in the list."""
+        path = self.settings.get("log_path")
+        if not path:
+            return {"ok": False, "error": "no live log to roll"}
+        info = archive.rotate(path, self._archive_dir())
+        if not info:
+            return {"ok": False, "error": "nothing to roll (missing/empty log)"}
+        pruned = self._prune_archives()
+        self._broadcast({"type": "archived", "character": info["character"],
+                         "bytes": info["bytes"], "reason": reason})
+        return {"ok": True, "pruned": len(pruned), **info}
+
+    def archive_info(self) -> dict:
+        import os
+        path = self.settings.get("log_path")
+        live_bytes = 0
+        if path:
+            try:
+                live_bytes = os.path.getsize(path)
+            except OSError:
+                live_bytes = 0
+        adir = self._archive_dir()
+        return {
+            "enabled": bool(self.settings.get("archive_enabled")),
+            "max_mb": self.settings.get("archive_max_mb"),
+            "retention_days": self.settings.get("archive_retention_days"),
+            "archive_dir": adir,
+            "live_path": path,
+            "live_bytes": live_bytes,
+            "character": self.group.me,
+            "archives": archive.list_archives(adir),
+        }
 
     # -- snapshots for the API ------------------------------------------------
     def live_summary(self) -> dict:
@@ -274,10 +400,12 @@ class Engine:
                 self.encounters.current.close()
                 self.encounters.history.append(self.encounters.current)
                 self.encounters.current = None
+            self._save_harvest()        # flush the outgoing character's totals
             self.parser.set_me(name)
             self.group = GroupTracker(me=name, mode=self.settings.get("mode"))
             self.encounters.group = self.group
             self._load_roster(name)     # warm-start this character's known allies
+            self._load_harvest(name)    # ...and their harvest totals
             self.settings.data["me"] = name
             if log_path:
                 self.settings.data["log_path"] = log_path
@@ -315,38 +443,61 @@ class Engine:
         return True
 
     # -- historical range import ----------------------------------------------
+    def _live_log_for(self, character: str) -> str:
+        """The live log path for a character (from the logs dir)."""
+        if not character:
+            return ""
+        for c in self.list_characters():
+            if c["character"].lower() == character.lower():
+                return c["path"]
+        return ""
+
+    def _range_logs(self, path: str, character: str, start_ts: float,
+                    end_ts: float) -> list:
+        """Ordered list of files to scan for a character/range. An explicit path
+        stays single-file; a character spans its archives + live log by date."""
+        if path:
+            return [path]
+        live = self._live_log_for(character)
+        return archive.logs_for_range(character, live, self._archive_dir(),
+                                      start_ts, end_ts)
+
     def import_range(self, path: str, me: str = "", start_ts: float = 0.0,
-                     end_ts: float = 0.0, mode: str = "all") -> dict:
-        """Parse a (sub-range of a) log file offline into fights and save them so
-        they appear in the history. Returns a summary of what was imported."""
+                     end_ts: float = 0.0, mode: str = "all",
+                     character: str = "") -> dict:
+        """Parse a (sub-range of a) character's history — spanning any rolled-off
+        archives plus the live log — into fights and save them to the history."""
         import os
-        if not path or not os.path.isfile(path):
+        files = self._range_logs(path, character or me, start_ts, end_ts)
+        files = [f for f in files if f and os.path.isfile(f)]
+        if not files:
             return {"ok": False, "error": "log file not found"}
-        me = me or char_from_path(path)
+        me = me or character or char_from_path(files[-1])
         parser = Parser(me=me)
         group = GroupTracker(me=me, mode=mode)
         # offline manager: collect closed fights ourselves
         timeout = float(self.settings.get("encounter_timeout"))
         mgr = EncounterManager(group, timeout=timeout)
         last_ts = 0.0
-        for line in open(path, encoding="utf-8", errors="replace"):
-            m = LINE_RE.match(line)
-            if not m:
-                continue
-            ts = float(m.group("epoch"))
-            if start_ts and ts < start_ts:
-                continue
-            if end_ts and ts > end_ts:
-                break
-            last_ts = ts
-            msg = m.group("msg").rstrip("\r\n")
-            zm = ZONE_RE.match(msg)
-            if zm:
-                mgr.zone = zm.group("zone").strip()
-            group.observe_text(msg)
-            ev = parser.parse_message(msg, ts, raw=line)
-            if ev is not None:
-                mgr.feed(ev)
+        for fpath in files:                       # archives first, live last
+            for line in open(fpath, encoding="utf-8", errors="replace"):
+                m = LINE_RE.match(line)
+                if not m:
+                    continue
+                ts = float(m.group("epoch"))
+                if start_ts and ts < start_ts:
+                    continue
+                if end_ts and ts > end_ts:
+                    break
+                last_ts = ts
+                msg = m.group("msg").rstrip("\r\n")
+                zm = ZONE_RE.match(msg)
+                if zm:
+                    mgr.zone = zm.group("zone").strip()
+                group.observe_text(msg)
+                ev = parser.parse_message(msg, ts, raw=line)
+                if ev is not None:
+                    mgr.feed(ev)
         mgr.tick(now=last_ts + timeout + 1)
         saved = []
         for f in mgr.all_fights():
@@ -358,6 +509,50 @@ class Engine:
         self._broadcast({"type": "fight_closed"})
         return {"ok": True, "character": me, "imported": len(saved),
                 "fights": saved}
+
+    # -- harvest snapshots / import / clear ------------------------------------
+    def harvest_snapshot(self) -> dict:
+        snap = self.harvest.snapshot()
+        snap["character"] = self.group.me
+        snap["enabled"] = bool(self.settings.get("harvest_enabled"))
+        return snap
+
+    def clear_harvests(self) -> None:
+        self.harvest.clear()
+        self._save_harvest()
+        self._broadcast({"type": "harvest"})
+
+    def import_harvests(self, path: str, me: str = "", start_ts: float = 0.0,
+                        end_ts: float = 0.0, character: str = "") -> dict:
+        """Scan a character's history (archives + live log) for harvests in a
+        date range and merge them into that character's cumulative totals."""
+        import os
+        files = self._range_logs(path, character or me, start_ts, end_ts)
+        files = [f for f in files if f and os.path.isfile(f)]
+        if not files:
+            return {"ok": False, "error": "log file not found"}
+        me = me or character or char_from_path(files[-1])
+        scratch = HarvestTracker()
+        for fpath in files:
+            for line in open(fpath, encoding="utf-8", errors="replace"):
+                m = LINE_RE.match(line)
+                if not m:
+                    continue
+                ts = float(m.group("epoch"))
+                if start_ts and ts < start_ts:
+                    continue
+                if end_ts and ts > end_ts:
+                    break
+                scratch.feed(m.group("msg").rstrip("\r\n"), ts)
+        added = scratch.snapshot()
+        self.harvest.merge(scratch)
+        self._save_harvest()
+        self._broadcast({"type": "harvest"})
+        return {"ok": True, "character": me,
+                "imported_qty": added["total_qty"],
+                "imported_actions": added["total_actions"],
+                "imported_items": added["unique_items"],
+                "imported_rares": added["rare_total"]}
 
     def status(self) -> dict:
         return {

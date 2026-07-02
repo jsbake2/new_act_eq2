@@ -11,5 +11,10 @@
   "paste_top": 6,
   "autocopy_enabled": true,
   "autocopy_min_seconds": 30.0,
-  "autocopy_min_damage": 0
+  "autocopy_min_damage": 0,
+  "harvest_enabled": true,
+  "archive_enabled": false,
+  "archive_max_mb": 50,
+  "archive_dir": "",
+  "archive_retention_days": 0
 }

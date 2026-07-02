@@ -10,6 +10,7 @@ venv/
 *.db
 data/*.sqlite*
 data/fights.db*
+data/harvests.json
 *.log
 !tests/sample_logs/*.txt
 .DS_Store

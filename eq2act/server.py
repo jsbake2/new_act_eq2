@@ -145,6 +145,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not detail:
                     return self._send_json({"error": "not found"}, 404)
                 return self._send_json(detail)
+            if path == "/api/harvest":
+                return self._send_json(eng.harvest_snapshot())
+            if path == "/api/archive":
+                return self._send_json(eng.archive_info())
             if path == "/api/triggers":
                 return self._send_json(eng.triggers.list())
             if path == "/api/settings":
@@ -194,18 +198,27 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"ok": ok, "me": eng.settings.get("me")})
             if path == "/api/import":
                 body = self._read_json()
-                path_ = body.get("path", "")
-                if not path_ and body.get("character"):
-                    for c in eng.list_characters():
-                        if c["character"].lower() == body["character"].lower():
-                            path_ = c["path"]
-                            break
+                # character (no path) spans archives + live log; explicit path = single file
                 res = eng.import_range(
-                    path_, me=body.get("me", ""),
+                    body.get("path", ""), me=body.get("me", ""),
+                    character=body.get("character", ""),
                     start_ts=float(body.get("start_ts") or 0),
                     end_ts=float(body.get("end_ts") or 0),
                     mode=body.get("mode", "all"))
                 return self._send_json(res)
+            if path == "/api/harvest/import":
+                body = self._read_json()
+                res = eng.import_harvests(
+                    body.get("path", ""), me=body.get("me", ""),
+                    character=body.get("character", ""),
+                    start_ts=float(body.get("start_ts") or 0),
+                    end_ts=float(body.get("end_ts") or 0))
+                return self._send_json(res)
+            if path == "/api/harvest/clear":
+                eng.clear_harvests()
+                return self._send_json({"ok": True})
+            if path == "/api/archive/rotate":
+                return self._send_json(eng.rotate_now(reason="manual"))
             if path == "/api/aggregate":
                 body = self._read_json()
                 ids = body.get("ids")
