@@ -1,7 +1,7 @@
 {
-  "log_path": "/mnt/games3/SteamLibrary/steamapps/common/EverQuest 2/logs/Wuoshi/eq2log_Trailmix.txt",
-  "log_dir": "/mnt/games3/SteamLibrary/steamapps/common/EverQuest 2/logs/Wuoshi",
-  "me": "Trailmix",
+  "log_path": "",
+  "log_dir": "",
+  "me": "You",
   "mode": "group",
   "encounter_timeout": 12.0,
   "from_start": false,

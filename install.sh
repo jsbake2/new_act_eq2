@@ -106,15 +106,21 @@ fi
 say "Writing configuration…"
 "$PY" - "$LOG_DIR" <<'PY'
 import json, os, sys
-root = os.path.dirname(os.path.abspath("install.sh"))
 cfgdir = os.path.join(os.getcwd(), "config"); os.makedirs(cfgdir, exist_ok=True)
 path = os.path.join(cfgdir, "settings.json")
+example = os.path.join(cfgdir, "settings.example.json")
+# start from the shipped example so every default (incl. new keys) is present
 defaults = {"log_path":"","log_dir":"","me":"You","mode":"group",
             "encounter_timeout":12.0,"from_start":False,"host":"127.0.0.1",
             "port":8777,"paste_title":"EQ2ACT","paste_top":6,
-            "autocopy_enabled":True,"autocopy_min_seconds":30.0,"autocopy_min_damage":0}
-data = dict(defaults)
+            "autocopy_enabled":True,"autocopy_min_seconds":30.0,"autocopy_min_damage":0,
+            "harvest_enabled":True,"archive_enabled":False,"archive_max_mb":50,
+            "archive_dir":"","archive_retention_days":0}
 try:
+    with open(example) as f: defaults.update(json.load(f))
+except Exception: pass
+data = dict(defaults)
+try:                                   # keep any existing local tweaks
     with open(path) as f: data.update(json.load(f))
 except Exception: pass
 log_dir = sys.argv[1] if len(sys.argv) > 1 else ""

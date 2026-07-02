@@ -11,6 +11,9 @@ venv/
 data/*.sqlite*
 data/fights.db*
 data/harvests.json
+# per-machine runtime state — regenerated on first run / by install.sh
+config/settings.json
+data/roster.json
 *.log
 !tests/sample_logs/*.txt
 .DS_Store
